@@ -1,0 +1,18 @@
+{
+    "files.associations": {
+        "random": "c",
+        "time.h": "c",
+        "stdlib.h": "c",
+        "array": "c",
+        "deque": "c",
+        "forward_list": "c",
+        "list": "c",
+        "string": "c",
+        "unordered_map": "c",
+        "unordered_set": "c",
+        "vector": "c",
+        "string_view": "c",
+        "initializer_list": "c",
+        "fcntl.h": "c"
+    }
+}
