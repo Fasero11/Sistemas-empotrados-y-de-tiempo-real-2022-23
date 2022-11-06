@@ -3,17 +3,76 @@
 #include <DHT.h>
 #include <Thread.h>
 
+// Constants
 const int ARRANQUE = 0, SERVICIO = 1, ADMIN = 2;
-int LED_1 = 8, LED_1_counter = 6, ledstate = LOW, state = ARRANQUE, is_client = 0, DHT_pin = 9, ms_timer_start = 0;
-const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2, trigger = 6, echo = 7;
+
+// Variables
+int state = ARRANQUE, ms_timer_start = 0, joystick_read = 0, lcd_cleared = 0, scroll_count = 0;
+
+// Pins
+const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 10, trigger = 6, echo = 7, DHT_pin = 9, 
+LED_1 = 8, joy_BTN = 2, joy_x = A4, joy_y = A5;
+
+// Variables modified in ISR
+volatile byte ledstate = LOW, LED_1_counter = 6, is_client = 0,  item_selected = 0;
+
+char *items[] = {"Cafe Solo", "Cafe Cortado", "Cafe Doble", "Cafe Premium", "Chocolate"};
+float prices[] = {1, 1.10, 1.25, 1.50, 2};
+int item_id = 0; // which item is the user on.
 
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 DHT dht(DHT_pin, DHT11);
 Thread myThread = Thread();
 
+void scroll_text(){
+  lcd.scrollDisplayLeft();
+}
+
+void update_joystick_btn(){
+  item_selected = 1;
+}
+
+int update_joystick_y(){
+  int updated = 0;
+  int val_y = analogRead(joy_y);
+  if (val_y < 100 & !joystick_read){
+    item_id++;
+    updated = 1;
+    joystick_read = 1;
+  } else if (val_y > 900 & !joystick_read){
+    item_id--;
+    updated = 1;
+    joystick_read = 1;
+  } else if (val_y > 100 & val_y < 900){
+    joystick_read = 0;
+  }
+
+  if (item_id < 0){
+    item_id = 0;
+  } else if (item_id > 4){
+    item_id = 4;
+  }
+ 
+  return updated;
+}
+
 void blinkLED_1() {
   ledstate = !ledstate;
   LED_1_counter--;
+}
+
+void showItems(){
+  if (update_joystick_y()){
+    lcd.clear();
+  }
+  Serial.println(item_id);
+  int i;
+  for (i = 0; i < 2; i++){
+    lcd.setCursor(0,i);
+    lcd.print(items[item_id+i]);
+  }
+  lcd.setCursor(15,0);
+  lcd.print("*");
 }
 
 void show_T_and_H(){
@@ -51,6 +110,7 @@ void setup() {
   pinMode(LED_1, OUTPUT);
   pinMode(trigger, OUTPUT);
   pinMode(echo, INPUT);
+  pinMode(joy_BTN , INPUT_PULLUP); 
   
   digitalWrite(LED_1, LOW);
 
@@ -63,6 +123,8 @@ void setup() {
 
   lcd.begin(16,2);
   dht.begin();
+
+  attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);
 }
 
 void loop() {
@@ -80,6 +142,7 @@ void loop() {
   }
 
   if (state == SERVICIO){
+    Serial.println(item_selected);
     if (!is_client){
       detectClient();
       lcd.setCursor(0,0);
@@ -97,6 +160,25 @@ void loop() {
           delay(500);
           lcd.clear();
         } else {
+          if (!item_selected){
+            showItems();           
+          } else{
+            if (!lcd_cleared){
+              lcd.clear();
+              lcd_cleared = 1;
+              lcd.setCursor(0,0);
+              lcd.print("Preparando Cafe...");
+            }
+            // There are two extra characters. (Scroll twice)
+            if (scroll_count < 3){
+              delay(750);
+              scroll_text();
+              scroll_count++;
+            } else {
+              lcd_cleared = 0;
+              scroll_count = 0;
+            }
+          }
         }
       }
   }
