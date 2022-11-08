@@ -11,9 +11,10 @@ float prices[] = {1, 1.10, 1.25, 1.50, 2};
 
 // Variables
 int state = ARRANQUE , joystick_read = 0, lcd_cleared = 0, scroll_count = 0, already_scrolled = 0, previous_second = 0, item_id = 0,
-    make_time = 0, LED2_bright = 0, menu_back = 0, distance_cm = 0, prev_dist_digits = 0, change_price_ID = 0, change_price_selected = 0;
-unsigned long ms_timer_start = 0, BTN_timer = 0, prev_BTN_timer = 0;
+    make_time = 0, LED2_bright = 0, menu_back = 0, distance_cm = 0, prev_dist_digits = 0, change_price_ID = 0, change_price_selected = 0, confirm_price = 0;
+unsigned long ms_timer_start = 0, BTN_timer = 0, prev_BTN_timer = 0, BTN_cooldown = 0;
 double scale_factor = 0.0;
+float price_increment = 0;
 
 // Pins
 const int rs = 8, en = 9, d4 = 10, d5 = 11, d6 = 12, d7 = 13, trigger = 6, echo = 7, DHT_pin = 4, 
@@ -30,14 +31,16 @@ Thread LED_2_Thread = Thread();
 
 void show_temp(){
     float temp_C = dht.readTemperature();
-    float temp_F = dht.readTemperature(true);
+    float humidity = dht.readHumidity();
     lcd.setCursor(0,0);
-    lcd.print("Temp. C: ");
+    lcd.print("Temp: ");
     lcd.print(temp_C);
+    
 
     lcd.setCursor(0,1);
-    lcd.print("Temp. F: ");
-    lcd.print(temp_F);
+    lcd.print("Hum: ");
+    lcd.print(humidity);
+    lcd.print("%");
 }
 
 void show_dist(){
@@ -59,8 +62,10 @@ void show_dist(){
     }
 
     lcd.setCursor(0,0);
-    lcd.print("Dist.(cm): ");
+    lcd.print("Distancia: ");
+    lcd.setCursor(0,1);
     lcd.print(distance_cm);
+    lcd.print(" cm");
 
     Serial.print("Dist.(cm): ");
     Serial.println(distance_cm);
@@ -178,9 +183,13 @@ int scroll_text_sec(){
 
 void update_joystick_btn(){
     Serial.println("Button Pressed");
-    // To ignore additional interruptions
-    detachInterrupt(digitalPinToInterrupt(joy_BTN)); // As recommended in the documentation.
-    joyBTN_just_pressed = 1;
+    // Cooldown to avoid false positives
+    if ((millis() - BTN_cooldown) > 500){
+        // To ignore additional interruptions.
+        detachInterrupt(digitalPinToInterrupt(joy_BTN)); // As recommended in the documentation.
+        joyBTN_just_pressed = 1;
+        BTN_cooldown = millis();
+    }
 }
 
 void update_joystick_x(){
@@ -362,30 +371,26 @@ void show_item_change(){
 }
 
 void change_price(){
-    float item_price = prices[change_price_ID];
-
     int joy_y_update = update_joystick_y();
 
     if (joy_y_update > 0){
-        item_price = item_price - 0.05;
+        price_increment = price_increment - 0.05;
     } else if (joy_y_update < 0){
-        item_price = item_price + 0.05;
+        price_increment = price_increment + 0.05;
     }
 
     if (joy_y_update != 0){
         lcd.clear();
-        if (item_price < 0.05){
-            item_price = 0.05;
-        } else if (item_price > 9.95){
-            item_price = 9.95;
+        if ((price_increment + prices[change_price_ID]) < 0.05){
+            price_increment = price_increment + 0.05;
+        } else if ((price_increment + prices[change_price_ID]) > 9.95){
+            price_increment = price_increment - 0.05;
         }
     }
   
     lcd.setCursor(0,0);
     lcd.print("Price: ");
-    lcd.print(item_price);
-
-    prices[change_price_ID] = item_price;
+    lcd.print(price_increment + prices[change_price_ID]);
 }
 
 void show_T_and_H(){
@@ -550,7 +555,9 @@ void loop() {
     Serial.print("| change_price_selected: ");
     Serial.print(change_price_selected);
     Serial.print("| joyBTN_just_pressed: ");
-    Serial.println(joyBTN_just_pressed);
+    Serial.print(joyBTN_just_pressed);
+    Serial.print("| confirm_price: ");
+    Serial.println(confirm_price);
     
     if (!item_selected){
         showAdmin();
@@ -580,26 +587,41 @@ void loop() {
           
             case 2:
                 lcd.setCursor(0,0);
-                lcd.print("Seconds: ");
+                lcd.print("Segundos: ");
+                lcd.setCursor(0,1);
                 lcd.print(millis()/1000);
                 break;
           
             case 3:
                 //Serial.println("ID 3");
-                if (joyBTN_just_pressed){
+                if (joyBTN_just_pressed && !change_price_selected){
+                    Serial.println("change_price_selected: ");
                     change_price_selected = 1;
+                    lcd.clear();
                     joyBTN_just_pressed = 0;
-                    lcd.clear();  
+                    BTN_cooldown = millis();
+                    attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);   
                 }
-                
+
                 if (!change_price_selected){
                     show_item_change();
-                    attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);  
+                    attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);
                 } else {
                     Serial.print("change_price_ID: ");
                     Serial.println(change_price_ID);
                     change_price();
+                    if (confirm_price){
+                        prices[change_price_ID] = prices[change_price_ID] + price_increment;
+                        menu_back = 1;  
+                        lcd.clear();  
+                    }
+
+                    if (joyBTN_just_pressed){
+                        confirm_price = 1;
+                        joyBTN_just_pressed = 0;   
+                    }
                 }
+                  
                 break;
           
              default:
@@ -607,6 +629,8 @@ void loop() {
       }
        
     if (menu_back){
+        confirm_price = 0;
+        price_increment = 0;
         lcd.clear();
         item_selected = 0;
         change_price_selected = 0;
