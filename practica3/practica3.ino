@@ -15,8 +15,8 @@ unsigned long ms_timer_start = 0, BTN_timer = 0, prev_BTN_timer = 0;
 double scale_factor = 0.0;
 
 // Pins
-const int rs = 8, en = 9, d4 = 10, d5 = 11, d6 = 12, d7 = 13, trigger = 6, echo = 7, DHT_pin = 1, 
-LED_1 = 4, LED_2 = 5, joy_BTN = 2, joy_x = A4, joy_y = A5, BTN = 3;
+const int rs = 8, en = 9, d4 = 10, d5 = 11, d6 = 12, d7 = 13, trigger = 6, echo = 7, DHT_pin = 4, 
+LED_1 = A3, LED_2 = 5, joy_BTN = 2, joy_x = A4, joy_y = A5, BTN = 3;
 
 // Variables modified in ISR
 volatile byte ledstate = LOW, LED_1_counter = 6, is_client = 0,  item_selected = 0, joyBTN_just_pressed = 0, BTN_just_pressed = 0, BTN_interrupts = 0;
@@ -34,10 +34,15 @@ Thread LED_2_Thread = Thread();
 
 
 void show_temp(){
-  float temp = dht.readTemperature();
+  float temp_C = dht.readTemperature();
+  float temp_F = dht.readTemperature(true);
   lcd.setCursor(0,0);
-  lcd.print("Temp.: ");
-  lcd.print(temp);
+  lcd.print("Temp. C: ");
+  lcd.print(temp_C);
+
+  lcd.setCursor(0,1);
+  lcd.print("Temp. F: ");
+  lcd.print(temp_F);
 }
 
 void show_dist(){
