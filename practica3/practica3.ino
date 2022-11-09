@@ -2,29 +2,31 @@
 #include <LiquidCrystal.h>
 #include <DHT.h>
 #include <Thread.h>
+#include <avr/wdt.h>
 
 // Constants
 const int ARRANQUE = 0, SERVICIO = 1, ADMIN = 2;
-char *items[] = {"Cafe Solo", "Cafe Cortado", "Cafe Doble", "Cafe Premium", "Chocolate"};
-char *admin_items[] = {"Ver temperatura", "Ver distancia sensor", "Ver contador", "Modificar Precios"};
-float prices[] = {1, 1.10, 1.25, 1.50, 2};
+char *ITEMS[] = {"Cafe Solo", "Cafe Cortado", "Cafe Doble", "Cafe Premium", "Chocolate"};
+char *ADMIN_ITEMS[] = {"Ver temperatura", "Ver distancia sensor", "Ver contador", "Modificar Precios"};
+
+// Pins
+const int RS = 8, EN = 9, D4 = 10, D5 = 11, D6 = 12, D7 = 13, TRIGGER = 6, ECHO = 7, DHT_PIN = 4, 
+          LED_1 = A3, LED_2 = 5, JOY_BTN = 2, JOY_X = A4, JOY_Y = A5, BTN = 3;
 
 // Variables
 int state = ARRANQUE , joystick_read = 0, lcd_cleared = 0, scroll_count = 0, already_scrolled = 0, previous_second = 0, item_id = 0,
-    make_time = 0, LED2_bright = 0, menu_back = 0, distance_cm = 0, prev_dist_digits = 0, change_price_ID = 0, change_price_selected = 0, confirm_price = 0;
-unsigned long ms_timer_start = 0, BTN_timer = 0, prev_BTN_timer = 0, BTN_cooldown = 0;
-double scale_factor = 0.0;
+    make_time = 0, led2_brightness = 0, menu_back = 0, distance_cm = 0, prev_dist_digits = 0, change_price_id = 0, change_price_selected = 0, confirm_price = 0;
+unsigned long ms_timer_start = 0, btn_timer = 0, prev_btn_timer = 0, btn_cooldown = 0;
+double maketime_2_255 = 0.0;
 float price_increment = 0;
-
-// Pins
-const int rs = 8, en = 9, d4 = 10, d5 = 11, d6 = 12, d7 = 13, trigger = 6, echo = 7, DHT_pin = 4, 
-          LED_1 = A3, LED_2 = 5, joy_BTN = 2, joy_x = A4, joy_y = A5, BTN = 3;
+float prices[] = {1, 1.10, 1.25, 1.50, 2};
 
 // Variables modified in ISR
-volatile byte ledstate = LOW, LED_1_counter = 6, is_client = 0,  item_selected = 0, joyBTN_just_pressed = 0, BTN_just_pressed = 0, BTN_interrupts = 0;
+volatile short ledstate = LOW, is_client = 0, item_selected = 0, joyBTN_just_pressed = 0, BTN_just_pressed = 0;
+volatile short led_1_counter = 6, BTN_interrupts = 0;
 
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
-DHT dht(DHT_pin, DHT11);
+LiquidCrystal lcd(RS, EN, D4, D5, D6, D7);
+DHT dht(DHT_PIN, DHT11);
 Thread T_H_Thread = Thread();
 Thread Prep_Thread = Thread();
 Thread LED_2_Thread = Thread();
@@ -89,17 +91,17 @@ void reset_servicio(){
 
 void check_btn_hold(){
     if (BTN_just_pressed){
-    BTN_timer = millis();
+    btn_timer = millis();
 
     Serial.print("BTN_PRESSED: ");
-    Serial.println((BTN_timer - prev_BTN_timer));
+    Serial.println((btn_timer - prev_btn_timer));
 
     Serial.print("BTN_interrupts: ");
     Serial.println(BTN_interrupts);
     
-    if ( (((BTN_timer - prev_BTN_timer)) > 5000) && BTN_interrupts > 1 && state != ADMIN){
+    if ( (((btn_timer - prev_btn_timer)) > 5000) && BTN_interrupts > 1 && state != ADMIN){
         Serial.println("CHANGE TO ADMIN");
-        attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);
+        attachInterrupt(digitalPinToInterrupt(JOY_BTN), update_joystick_btn, LOW);
         item_selected = 0;
         state = ADMIN;
         lcd.clear();
@@ -107,13 +109,13 @@ void check_btn_hold(){
         digitalWrite(LED_2, 1);
         lcd_cleared = 0;
       
-    } else if ( (((BTN_timer - prev_BTN_timer)) > 5000) && BTN_interrupts > 1 && state == ADMIN){
-        detachInterrupt(digitalPinToInterrupt(joy_BTN));
+    } else if ( (((btn_timer - prev_btn_timer)) > 5000) && BTN_interrupts > 1 && state == ADMIN){
+        detachInterrupt(digitalPinToInterrupt(JOY_BTN));
         Serial.println("FROM ADMIN TO SERV");
         state = SERVICIO;
         reset_servicio();
       
-    } else if ( (((BTN_timer - prev_BTN_timer)) > 2000) && (((BTN_timer - prev_BTN_timer)) < 3000) && BTN_interrupts > 1 && state == SERVICIO){
+    } else if ( (((btn_timer - prev_btn_timer)) > 2000) && (((btn_timer - prev_btn_timer)) < 3000) && BTN_interrupts > 1 && state == SERVICIO){
         Serial.println("GO TO SERV");
         reset_servicio();
     }
@@ -122,26 +124,26 @@ void check_btn_hold(){
         BTN_interrupts = 0;
     }
     
-    prev_BTN_timer = BTN_timer;
+    prev_btn_timer = btn_timer;
     BTN_just_pressed = 0;
   }
 }
 
-void read_BTN(){
+void read_btn(){
     BTN_just_pressed = 1;
     BTN_interrupts++;
 }
 
-void light_LED2(){
+void light_led2(){
     Serial.print("BRIGHT: ");
-    Serial.println(LED2_bright);
-    if (LED2_bright > 255){
-        LED2_bright = 255;
+    Serial.println(led2_brightness);
+    if (led2_brightness > 255){
+        led2_brightness = 255;
     }
-    if (LED2_bright < 0){
-        LED2_bright = 0;
+    if (led2_brightness < 0){
+        led2_brightness = 0;
     }
-    analogWrite(LED_2, LED2_bright);
+    analogWrite(LED_2, led2_brightness);
 }
 
 void preparando_cafe(){
@@ -184,16 +186,16 @@ int scroll_text_sec(){
 void update_joystick_btn(){
     Serial.println("Button Pressed");
     // Cooldown to avoid false positives
-    if ((millis() - BTN_cooldown) > 500){
+    if ((millis() - btn_cooldown) > 500){
         // To ignore additional interruptions.
-        detachInterrupt(digitalPinToInterrupt(joy_BTN)); // As recommended in the documentation.
+        detachInterrupt(digitalPinToInterrupt(JOY_BTN)); // As recommended in the documentation.
         joyBTN_just_pressed = 1;
-        BTN_cooldown = millis();
+        btn_cooldown = millis();
     }
 }
 
 void update_joystick_x(){
-    int val_x = analogRead(joy_x);
+    int val_x = analogRead(JOY_X);
     if (val_x > 900){
         menu_back = 1;  
     }
@@ -201,7 +203,7 @@ void update_joystick_x(){
 
 int update_joystick_y(){
     int updated = 0;
-    int val_y = analogRead(joy_y);
+    int val_y = analogRead(JOY_Y);
     if (val_y > 900 & !joystick_read){
         updated = 1;
         joystick_read = 1;
@@ -215,25 +217,25 @@ int update_joystick_y(){
     return updated;
 }
 
-void blinkLED_1() {
+void blink_led_1() {
     ledstate = !ledstate;
-    LED_1_counter--;
+    led_1_counter--;
 }
 
-void showItems(){
+void show_items(){
     char item_and_price[40]; // 40 is MAX of LCD buffer
     char str_price[40];
     int i, str_len, max_len = 0;
 
-    int joy_y_update = update_joystick_y();
+    int JOY_Y_update = update_joystick_y();
 
-    if (joy_y_update > 0){
+    if (JOY_Y_update > 0){
         item_id++;
-    } else if (joy_y_update < 0){
+    } else if (JOY_Y_update < 0){
         item_id--;
     }
 
-    if (joy_y_update != 0){
+    if (JOY_Y_update != 0){
         lcd.clear();
         scroll_count = 0;
         if (item_id < 0){
@@ -247,9 +249,9 @@ void showItems(){
         dtostrf(prices[item_id+i], 5, 2, str_price); // Cast price from float to string
 
         if (i == 0) { // Item selected
-            str_len = snprintf(item_and_price, 40, "--> %s:%s", items[item_id+i], str_price); // Create string containing item and price
+            str_len = snprintf(item_and_price, 40, "--> %s:%s", ITEMS[item_id+i], str_price); // Create string containing item and price
         } else if (item_id < 4) {
-            str_len = snprintf(item_and_price, 40, "    %s:%s", items[item_id+i], str_price); // Create string containing item and price
+            str_len = snprintf(item_and_price, 40, "    %s:%s", ITEMS[item_id+i], str_price); // Create string containing item and price
         } else {
             item_and_price[0] = '\0';
             str_len = 0;
@@ -272,19 +274,19 @@ void showItems(){
     }
 }
 
-void showAdmin(){
+void show_admin(){
     char admin_item[40]; // 40 is MAX of LCD buffer
     int i, str_len, max_len = 0;
 
-    int joy_y_update = update_joystick_y();
+    int JOY_Y_update = update_joystick_y();
 
-    if (joy_y_update > 0){
+    if (JOY_Y_update > 0){
         item_id++;
-    } else if (joy_y_update < 0){
+    } else if (JOY_Y_update < 0){
         item_id--;
     }
 
-    if (joy_y_update != 0){
+    if (JOY_Y_update != 0){
         lcd.clear();
         scroll_count = 0;
     if (item_id < 0){
@@ -296,9 +298,9 @@ void showAdmin(){
 
     for (i = 0; i < 2; i++){
     if (i == 0) { // Item selected
-        str_len = snprintf(admin_item, 40, "--> %s", admin_items[item_id+i]);
+        str_len = snprintf(admin_item, 40, "--> %s", ADMIN_ITEMS[item_id+i]);
     } else if (item_id < 3) {
-        str_len = snprintf(admin_item, 40, "    %s", admin_items[item_id+i]);
+        str_len = snprintf(admin_item, 40, "    %s", ADMIN_ITEMS[item_id+i]);
     } else {
         admin_item[0] = '\0';
         str_len = 0;
@@ -325,29 +327,29 @@ void show_item_change(){
     char item[40]; // 40 is MAX of LCD buffer
     int i, str_len, max_len = 0;
 
-    int joy_y_update = update_joystick_y();
+    int JOY_Y_update = update_joystick_y();
 
-    if (joy_y_update > 0){
-        change_price_ID++;
-    } else if (joy_y_update < 0){
-        change_price_ID--;
+    if (JOY_Y_update > 0){
+        change_price_id++;
+    } else if (JOY_Y_update < 0){
+        change_price_id--;
     }
 
-    if (joy_y_update != 0){
+    if (JOY_Y_update != 0){
         lcd.clear();
         scroll_count = 0;
-    if (change_price_ID < 0){
-        change_price_ID = 0;
-    } else if (change_price_ID > 4){
-        change_price_ID = 4;
+    if (change_price_id < 0){
+        change_price_id = 0;
+    } else if (change_price_id > 4){
+        change_price_id = 4;
     }
     }
 
     for (i = 0; i < 2; i++){
         if (i == 0) { // Item selected
-            str_len = snprintf(item, 40, "--> %s", items[change_price_ID+i]);
-        } else if (change_price_ID < 4) {
-            str_len = snprintf(item, 40, "    %s", items[change_price_ID+i]);
+            str_len = snprintf(item, 40, "--> %s", ITEMS[change_price_id+i]);
+        } else if (change_price_id < 4) {
+            str_len = snprintf(item, 40, "    %s", ITEMS[change_price_id+i]);
         } else {
             item[0] = '\0';
             str_len = 0;
@@ -371,29 +373,29 @@ void show_item_change(){
 }
 
 void change_price(){
-    int joy_y_update = update_joystick_y();
+    int JOY_Y_update = update_joystick_y();
 
-    if (joy_y_update > 0){
+    if (JOY_Y_update > 0){
         price_increment = price_increment - 0.05;
-    } else if (joy_y_update < 0){
+    } else if (JOY_Y_update < 0){
         price_increment = price_increment + 0.05;
     }
 
-    if (joy_y_update != 0){
+    if (JOY_Y_update != 0){
         lcd.clear();
-        if ((price_increment + prices[change_price_ID]) < 0.05){
+        if ((price_increment + prices[change_price_id]) < 0.05){
             price_increment = price_increment + 0.05;
-        } else if ((price_increment + prices[change_price_ID]) > 9.95){
+        } else if ((price_increment + prices[change_price_id]) > 9.95){
             price_increment = price_increment - 0.05;
         }
     }
   
     lcd.setCursor(0,0);
-    lcd.print("Price: ");
-    lcd.print(price_increment + prices[change_price_ID]);
+    lcd.print("Precio: ");
+    lcd.print(price_increment + prices[change_price_id]);
 }
 
-void show_T_and_H(){
+void show_t_and_h(){
     float humidity = dht.readHumidity();
     float temp = dht.readTemperature();
 
@@ -408,13 +410,13 @@ void show_T_and_H(){
 int get_distance(){
     long pulse_delay, distance_cm;
 
-    digitalWrite(trigger, LOW);
+    digitalWrite(TRIGGER, LOW);
     delayMicroseconds(4);
-    digitalWrite(trigger, HIGH);
+    digitalWrite(TRIGGER, HIGH);
     delayMicroseconds(10);
-    digitalWrite(trigger, LOW);
+    digitalWrite(TRIGGER, LOW);
 
-    pulse_delay = pulseIn(echo, HIGH);
+    pulse_delay = pulseIn(ECHO, HIGH);
 
     distance_cm = pulse_delay / 59;
     //Serial.println(distance_cm);
@@ -426,45 +428,52 @@ void setup() {
     Serial.begin(9600);
     pinMode(LED_1, OUTPUT);
     pinMode(LED_2, OUTPUT);
-    pinMode(trigger, OUTPUT);
-    pinMode(echo, INPUT);
-    pinMode(joy_BTN , INPUT_PULLUP);                                                                                                                                                                                                                                                                                                 
+    pinMode(TRIGGER, OUTPUT);
+    pinMode(ECHO, INPUT);
+    pinMode(JOY_BTN , INPUT_PULLUP);                                                                                                                                                                                                                                                                                                 
     pinMode(BTN, INPUT); 
 
     digitalWrite(LED_1, LOW);
 
     Timer1.initialize(1000000);
-    Timer1.attachInterrupt(blinkLED_1);
+    Timer1.attachInterrupt(blink_led_1);
 
     lcd.begin(16,2);
     dht.begin();
 
     T_H_Thread.enabled = true;
     T_H_Thread.setInterval(100);
-    T_H_Thread.onRun(show_T_and_H);
+    T_H_Thread.onRun(show_t_and_h);
 
     Prep_Thread.setInterval(100);
     Prep_Thread.onRun(preparando_cafe);
     Prep_Thread.enabled = false;
 
     LED_2_Thread.setInterval(100);
-    LED_2_Thread.onRun(light_LED2);
+    LED_2_Thread.onRun(light_led2);
     LED_2_Thread.enabled = false;
 
-    attachInterrupt(digitalPinToInterrupt(BTN), read_BTN, CHANGE);
+    wdt_disable();
+    wdt_enable(WDTO_1S);
+
+    attachInterrupt(digitalPinToInterrupt(BTN), read_btn, CHANGE);
 }
 
 void loop() {
+    //Serial.println("Watchdog reset");
+    wdt_reset();
+    
     check_btn_hold();
   
     if (state == ARRANQUE){
-        if (LED_1_counter > 0){
+        if (led_1_counter > 0){
             lcd.setCursor(0,0);
             lcd.print("CARGANDO...");
-            //Serial.println(LED_1_counter);
+            //Serial.println(led_1_counter);
             digitalWrite(LED_1, ledstate);
         } else{
-            detachInterrupt(blinkLED_1);
+            digitalWrite(LED_1, 0);
+            detachInterrupt(blink_led_1);
             state = 1;
             lcd.clear();
         }
@@ -493,7 +502,7 @@ void loop() {
             } else {
                 if (T_H_Thread.enabled){
                     T_H_Thread.enabled = false;
-                    attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);  // Allows button interruption (For selecting item)
+                    attachInterrupt(digitalPinToInterrupt(JOY_BTN), update_joystick_btn, LOW);  // Allows button interruption (For selecting item)
                 }
                 //Serial.print("Item Selected: ");
                 //Serial.println(item_selected);
@@ -505,11 +514,11 @@ void loop() {
                     lcd_cleared = 0;
                     Prep_Thread.enabled = true;
                     LED_2_Thread.enabled = true;
-                    scale_factor = 255.0 / (make_time*1000);
+                    maketime_2_255 = 255.0 / (make_time*1000);
                 }
                 
                 if (!item_selected){
-                    showItems();        
+                    show_items();        
                 } else{
                     //Serial.print("Prep_Thread: ");
                     //Serial.println(Prep_Thread.enabled);
@@ -521,8 +530,8 @@ void loop() {
                         }
                         if (LED_2_Thread.shouldRun()){
                             //Serial.println((millis() - ms_timer_start));
-                            //Serial.println(scale_factor);
-                            LED2_bright = int((millis() - ms_timer_start)) * scale_factor;
+                            //Serial.println(maketime_2_255);
+                            led2_brightness = int((millis() - ms_timer_start)) * maketime_2_255;
                             LED_2_Thread.run(); 
                         }
                     } else {
@@ -546,100 +555,100 @@ void loop() {
         }
     }
     if (state == ADMIN){
-    Serial.print("Item Selected: ");
-    Serial.print(item_selected);
-    Serial.print("| menu_back: ");
-    Serial.print(menu_back);
-    Serial.print("| item_ID: ");
-    Serial.print(item_id);
-    Serial.print("| change_price_selected: ");
-    Serial.print(change_price_selected);
-    Serial.print("| joyBTN_just_pressed: ");
-    Serial.print(joyBTN_just_pressed);
-    Serial.print("| confirm_price: ");
-    Serial.println(confirm_price);
+        Serial.print("Item Selected: ");
+        Serial.print(item_selected);
+        Serial.print("| menu_back: ");
+        Serial.print(menu_back);
+        Serial.print("| item_ID: ");
+        Serial.print(item_id);
+        Serial.print("| change_price_selected: ");
+        Serial.print(change_price_selected);
+        Serial.print("| joyBTN_just_pressed: ");
+        Serial.print(joyBTN_just_pressed);
+        Serial.print("| confirm_price: ");
+        Serial.println(confirm_price);
+        
+        if (!item_selected){
+            show_admin();
+            if (joyBTN_just_pressed){
+                item_selected = 1;
+                joyBTN_just_pressed = 0;
+                lcd_cleared = 0;
+                change_price_selected = 0;
+            }       
+        } else {
+            if (!lcd_cleared){
+                Serial.println("CLEARED");
+                lcd.clear();
+                lcd_cleared = 1;
+            }
+          
+            update_joystick_x();
+          
+            switch (item_id){
+                case 0:
+                    show_temp();
+                    break;
+              
+                case 1:
+                    show_dist();
+                    break;
+              
+                case 2:
+                    lcd.setCursor(0,0);
+                    lcd.print("Segundos: ");
+                    lcd.setCursor(0,1);
+                    lcd.print(millis()/1000);
+                    break;
+              
+                case 3:
+                    //Serial.println("ID 3");
+                    if (joyBTN_just_pressed && !change_price_selected){
+                        Serial.println("change_price_selected: ");
+                        change_price_selected = 1;
+                        lcd.clear();
+                        joyBTN_just_pressed = 0;
+                        btn_cooldown = millis();
+                        attachInterrupt(digitalPinToInterrupt(JOY_BTN), update_joystick_btn, LOW);   
+                    }
     
-    if (!item_selected){
-        showAdmin();
-        if (joyBTN_just_pressed){
-            item_selected = 1;
-            joyBTN_just_pressed = 0;
-            lcd_cleared = 0;
-            change_price_selected = 0;
-        }       
-    } else {
-        if (!lcd_cleared){
-            Serial.println("CLEARED");
+                    if (!change_price_selected){
+                        show_item_change();
+                        attachInterrupt(digitalPinToInterrupt(JOY_BTN), update_joystick_btn, LOW);
+                    } else {
+                        Serial.print("change_price_id: ");
+                        Serial.println(change_price_id);
+                        change_price();
+                        if (confirm_price){
+                            prices[change_price_id] = prices[change_price_id] + price_increment;
+                            menu_back = 1;  
+                            lcd.clear();  
+                        }
+    
+                        if (joyBTN_just_pressed){
+                            confirm_price = 1;
+                            joyBTN_just_pressed = 0;   
+                        }
+                    }
+                      
+                    break;
+              
+                 default:
+                    break;
+          }
+           
+        if (menu_back){
+            confirm_price = 0;
+            price_increment = 0;
             lcd.clear();
-            lcd_cleared = 1;
+            item_selected = 0;
+            change_price_selected = 0;
+            change_price_id = 0;
+            // Allows button to be used again.
+            attachInterrupt(digitalPinToInterrupt(JOY_BTN), update_joystick_btn, LOW);
+            menu_back = 0;
+            lcd_cleared = 0;
+          }
         }
-      
-        update_joystick_x();
-      
-        switch (item_id){
-            case 0:
-                show_temp();
-                break;
-          
-            case 1:
-                show_dist();
-                break;
-          
-            case 2:
-                lcd.setCursor(0,0);
-                lcd.print("Segundos: ");
-                lcd.setCursor(0,1);
-                lcd.print(millis()/1000);
-                break;
-          
-            case 3:
-                //Serial.println("ID 3");
-                if (joyBTN_just_pressed && !change_price_selected){
-                    Serial.println("change_price_selected: ");
-                    change_price_selected = 1;
-                    lcd.clear();
-                    joyBTN_just_pressed = 0;
-                    BTN_cooldown = millis();
-                    attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);   
-                }
-
-                if (!change_price_selected){
-                    show_item_change();
-                    attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);
-                } else {
-                    Serial.print("change_price_ID: ");
-                    Serial.println(change_price_ID);
-                    change_price();
-                    if (confirm_price){
-                        prices[change_price_ID] = prices[change_price_ID] + price_increment;
-                        menu_back = 1;  
-                        lcd.clear();  
-                    }
-
-                    if (joyBTN_just_pressed){
-                        confirm_price = 1;
-                        joyBTN_just_pressed = 0;   
-                    }
-                }
-                  
-                break;
-          
-             default:
-                break;
-      }
-       
-    if (menu_back){
-        confirm_price = 0;
-        price_increment = 0;
-        lcd.clear();
-        item_selected = 0;
-        change_price_selected = 0;
-        change_price_ID = 0;
-        // Allows button to be used again.
-        attachInterrupt(digitalPinToInterrupt(joy_BTN), update_joystick_btn, LOW);
-        menu_back = 0;
-        lcd_cleared = 0;
-      }
-    }
   }
 }
