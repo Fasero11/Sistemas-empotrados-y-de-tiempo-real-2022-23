@@ -184,14 +184,9 @@ int scroll_text_sec(){
 }
 
 void update_joystick_btn(){
-    Serial.println("Button Pressed");
-    // Cooldown to avoid false positives
-    if ((millis() - btn_cooldown) > 500){
-        // To ignore additional interruptions.
-        detachInterrupt(digitalPinToInterrupt(JOY_BTN)); // As recommended in the documentation.
-        joyBTN_just_pressed = 1;
-        btn_cooldown = millis();
-    }
+    // To ignore additional interruptions.
+    detachInterrupt(digitalPinToInterrupt(JOY_BTN)); // As recommended in the documentation.
+    joyBTN_just_pressed = 1;
 }
 
 void update_joystick_x(){
@@ -239,9 +234,9 @@ void show_items(){
         lcd.clear();
         scroll_count = 0;
         if (item_id < 0){
-            item_id = 0;
-        } else if (item_id > 4){
             item_id = 4;
+        } else if (item_id > 4){
+            item_id = 0;
         }
     }
 
@@ -290,9 +285,9 @@ void show_admin(){
         lcd.clear();
         scroll_count = 0;
     if (item_id < 0){
-        item_id = 0;
-    } else if (item_id > 3){
         item_id = 3;
+    } else if (item_id > 3){
+        item_id = 0;
     }
     }
 
@@ -339,9 +334,9 @@ void show_item_change(){
         lcd.clear();
         scroll_count = 0;
     if (change_price_id < 0){
-        change_price_id = 0;
-    } else if (change_price_id > 4){
         change_price_id = 4;
+    } else if (change_price_id > 4){
+        change_price_id = 0;
     }
     }
 
@@ -435,7 +430,7 @@ void setup() {
 
     digitalWrite(LED_1, LOW);
 
-    Timer1.initialize(1000000);
+    Timer1.initialize(500000);
     Timer1.attachInterrupt(blink_led_1);
 
     lcd.begin(16,2);
@@ -608,14 +603,17 @@ void loop() {
                         change_price_selected = 1;
                         lcd.clear();
                         joyBTN_just_pressed = 0;
-                        btn_cooldown = millis();
-                        attachInterrupt(digitalPinToInterrupt(JOY_BTN), update_joystick_btn, LOW);   
+                        btn_cooldown = millis();  
                     }
     
                     if (!change_price_selected){
                         show_item_change();
                         attachInterrupt(digitalPinToInterrupt(JOY_BTN), update_joystick_btn, LOW);
                     } else {
+                        // Reactivate button after 500ms to avoid false positives.
+                        if ((millis() - btn_cooldown) > 500){
+                            attachInterrupt(digitalPinToInterrupt(JOY_BTN), update_joystick_btn, LOW);
+                        }
                         Serial.print("change_price_id: ");
                         Serial.println(change_price_id);
                         change_price();
