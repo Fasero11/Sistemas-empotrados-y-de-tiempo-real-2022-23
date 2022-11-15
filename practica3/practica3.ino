@@ -57,7 +57,7 @@ void setup() {
     Prep_Thread.enabled = false;
 
     LED_2_Thread.setInterval(100);
-    LED_2_Thread.onRun(light_led2);
+    LED_2_Thread.onRun(light_led_2);
     LED_2_Thread.enabled = false;
 
     wdt_disable();
@@ -116,12 +116,12 @@ void loop() {
                 if (joyBTN_just_pressed){
                     item_selected = 1;
                     joyBTN_just_pressed = 0;
-                    make_time = random(4,9);
-                    ms_timer_start = millis();
                     lcd_cleared = 0;
                     Prep_Thread.enabled = true;
                     LED_2_Thread.enabled = true;
-                    maketime_2_255 = 255.0 / (make_time*1000);
+                    make_time = random(4000,8001);
+                    ms_timer_start = millis();
+                    maketime_2_255 = 255.0 / make_time;
                 }
                 
                 if (!item_selected){
@@ -131,7 +131,7 @@ void loop() {
                     //Serial.println(Prep_Thread.enabled);
                     //Serial.print("TIME: ");
                     //Serial.println((millis() - ms_timer_start)/1000);
-                    if (Prep_Thread.enabled && (((millis() - ms_timer_start)/1000) < make_time) ){
+                    if (Prep_Thread.enabled && (((millis() - ms_timer_start)) < make_time) ){
                         if (Prep_Thread.shouldRun()){
                             Prep_Thread.run(); 
                         }
@@ -153,7 +153,7 @@ void loop() {
                             ms_timer_start = millis();
                         }
                         Serial.println(joyBTN_just_pressed);
-                        if (((millis() - ms_timer_start)/1000) > 3){
+                        if (((millis() - ms_timer_start)) > 3000){
                             reset_servicio();
                         }
                     }

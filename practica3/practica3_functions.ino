@@ -101,7 +101,7 @@ void read_btn(){
     BTN_interrupts++;
 }
 
-void light_led2(){
+void light_led_2(){
     Serial.print("BRIGHT: ");
     Serial.println(led2_brightness);
     if (led2_brightness > 255){
@@ -337,21 +337,16 @@ void show_item_change(){
 void change_price(){
     int JOY_Y_update = update_joystick_y();
 
-    if (JOY_Y_update > 0){
+    if ((JOY_Y_update > 0) && ((price_increment + prices[change_price_id]) > 0.05) ){
         price_increment = price_increment - 0.05;
-    } else if (JOY_Y_update < 0){
-        price_increment = price_increment + 0.05;
-    }
-
-    if (JOY_Y_update != 0){
         lcd.clear();
-        if ((price_increment + prices[change_price_id]) < 0.05){
-            price_increment = price_increment + 0.05;
-        } else if ((price_increment + prices[change_price_id]) > 9.95){
-            price_increment = price_increment - 0.05;
-        }
+    } else if ((JOY_Y_update < 0) && ((price_increment + prices[change_price_id]) < 9.95) ){
+        price_increment = price_increment + 0.05;
+        lcd.clear();
     }
-  
+    
+    Serial.print("INCREMENT: ");
+    Serial.println(price_increment);
     lcd.setCursor(0,0);
     lcd.print("Precio: ");
     lcd.print(price_increment + prices[change_price_id]);
